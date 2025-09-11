@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remote Mouse - Control Your Computer</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .logo {
+            font-size: 2.5rem;
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .title {
+            font-size: 2rem;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+        }
+        
+        .qr-section {
+            margin: 30px 0;
+        }
+        
+        .qr-code {
+            max-width: 250px;
+            margin: 20px auto;
+            border: 4px solid #f0f0f0;
+            border-radius: 15px;
+        }
+        
+        .connection-info {
+            background: #f8f9ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 5px 0;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: #555;
+        }
+        
+        .info-value {
+            color: #667eea;
+            font-family: monospace;
+        }
+        
+        .status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+        }
+        
+        .status.disconnected {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.connected {
+            background: #d1edff;
+            color: #0c5460;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .status-dot.disconnected {
+            background: #ffc107;
+        }
+        
+        .status-dot.connected {
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .instructions {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: left;
+            border-radius: 5px;
+        }
+        
+        .instructions h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .instructions ol {
+            margin-left: 20px;
+        }
+        
+        .instructions li {
+            margin: 5px 0;
+        }
+        
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 20px;
+            transition: background 0.3s;
+        }
+        
+        .refresh-btn:hover {
+            background: #5a67d8;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="container">
+            <div class="logo">📱💻</div>
+            <h1 class="title">Remote Mouse</h1>
+            <p class="subtitle">Control your computer from your phone</p>
+            
+            <div v-if="loading" class="loading"></div>
+            
+            <div v-if="!loading && qrData" class="qr-section">
+                <img :src="qrData.qrCode" alt="QR Code" class="qr-code">
+                
+                <div class="connection-info">
+                    <div class="info-item">
+                        <span class="info-label">Room ID:</span>
+                        <span class="info-value">{{ qrData.roomId }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Server IP:</span>
+                        <span class="info-value">{{ qrData.ip }}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Port:</span>
+                        <span class="info-value">{{ qrData.port }}</span>
+                    </div>
+                </div>
+                
+                <div :class="['status', connectionStatus]">
+                    <div :class="['status-dot', connectionStatus]"></div>
+                    <span>{{ statusMessage }}</span>
+                </div>
+                
+                <div v-if="connectedClients > 0" class="status connected">
+                    <div class="status-dot connected"></div>
+                    <span>{{ connectedClients }} device(s) connected</span>
+                </div>
+            </div>
+            
+            <div class="instructions">
+                <h3>How to connect:</h3>
+                <ol>
+                    <li>Download the Remote Mouse mobile app</li>
+                    <li>Open the app and tap "Scan QR Code"</li>
+                    <li>Point your camera at the QR code above</li>
+                    <li>Start controlling your computer!</li>
+                </ol>
+            </div>
+            
+            <button @click="refreshQR" class="refresh-btn" :disabled="loading">
+                {{ loading ? 'Generating...' : 'Generate New QR Code' }}
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            data() {
+                return {
+                    qrData: null,
+                    loading: true,
+                    socket: null,
+                    connectionStatus: 'disconnected',
+                    connectedClients: 0
+                }
+            },
+            computed: {
+                statusMessage() {
+                    switch(this.connectionStatus) {
+                        case 'connected':
+                            return 'Server Connected - Ready for connections';
+                        case 'disconnected':
+                            return 'Waiting for mobile connection...';
+                        default:
+                            return 'Initializing...';
+                    }
+                }
+            },
+            async mounted() {
+                await this.initializeServer();
+                this.setupSocketConnection();
+            },
+            methods: {
+                async initializeServer() {
+                    try {
+                        this.loading = true;
+                        const response = await fetch('/api/qr');
+                        this.qrData = await response.json();
+                        this.connectionStatus = 'disconnected';
+                    } catch (error) {
+                        console.error('Failed to get QR code:', error);
+                        alert('Failed to initialize server. Please refresh the page.');
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                
+                setupSocketConnection() {
+                    this.socket = io();
+                    
+                    this.socket.on('connect', () => {
+                        console.log('Connected to server');
+                        this.connectionStatus = 'disconnected';
+                    });
+                    
+                    this.socket.on('mobile-connected', (data) => {
+                        console.log('Mobile device connected:', data);
+                        this.connectionStatus = 'connected';
+                        this.connectedClients = data.totalClients;
+                    });
+                    
+                    this.socket.on('client-disconnected', (data) => {
+                        console.log('Client disconnected:', data);
+                        this.connectedClients = data.totalClients;
+                        if (this.connectedClients === 0) {
+                            this.connectionStatus = 'disconnected';
+                        }
+                    });
+                    
+                    this.socket.on('disconnect', () => {
+                        console.log('Disconnected from server');
+                        this.connectionStatus = 'disconnected';
+                        this.connectedClients = 0;
+                    });
+                },
+                
+                async refreshQR() {
+                    await this.initializeServer();
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
