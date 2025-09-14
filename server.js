@@ -50,8 +50,8 @@ const mouseController = new MouseController();
 // Mouse movement batching to improve smoothness and performance
 // - Accumulates deltas from clients and applies at a fixed rate
 // - Reduces the number of PowerShell invocations on Windows
-const MOUSE_SENSITIVITY = Number(process.env.MOUSE_SENSITIVITY || 1);
-const APPLY_INTERVAL_MS = Number(process.env.MOUSE_APPLY_INTERVAL_MS || 1000); // ~60Hz
+const MOUSE_SENSITIVITY = Number(process.env.MOUSE_SENSITIVITY || 1.4);
+const APPLY_INTERVAL_MS = Number(process.env.MOUSE_APPLY_INTERVAL_MS || 80); // ~60Hz
 let pendingDeltaX = 0;
 let pendingDeltaY = 0;
 
@@ -186,6 +186,53 @@ io.on('connection', (socket) => {
     }
   });
   
+  // Handle media controls from mobile
+  socket.on('media-control', async (data) => {
+    try {
+      const { action } = data || {};
+      if (!action) return;
+      
+      switch (action.toLowerCase()) {
+        case 'play':
+        case 'pause':
+        case 'playpause':
+        case 'play-pause':
+          await mouseController.playPause();
+          console.log(`Media ${action} executed`);
+          break;
+        case 'volumeup':
+        case 'volume_up':
+        case 'volume-up':
+          await mouseController.volumeUp();
+          console.log('Volume up executed');
+          break;
+        case 'volumedown':
+        case 'volume_down':
+        case 'volume-down':
+          await mouseController.volumeDown();
+          console.log('Volume down executed');
+          break;
+        case 'mute':
+          await mouseController.volumeMute();
+          console.log('Volume mute executed');
+          break;
+        case 'next':
+          await mouseController.nextTrack();
+          console.log('Next track executed');
+          break;
+        case 'previous':
+        case 'prev':
+          await mouseController.previousTrack();
+          console.log('Previous track executed');
+          break;
+        default:
+          console.warn(`Unknown media control action: ${action}`);
+      }
+    } catch (error) {
+      console.error('Error handling media control:', error);
+    }
+  });
+  
   socket.on('disconnect', () => {
     connectedClients.delete(socket.id);
     console.log('Client disconnected:', socket.id);
@@ -202,9 +249,13 @@ io.on('connection', (socket) => {
 
 server.listen(PORT, () => {
   console.log(`
-🚀 Remote Mouse Server Started!
+🚀 Remote Mouse Control Server Started!
+🖥️  Platform: ${os.platform()} (${os.arch()})
 📱 Web Interface: http://localhost:${PORT}
 🌐 Network URL: http://${localIP}:${PORT}
 📡 Socket.io Server Ready
+💡 Cross-platform support: Windows, macOS, Linux
+⚙️  Mouse sensitivity: ${MOUSE_SENSITIVITY}x
+🔄 Update interval: ${APPLY_INTERVAL_MS}ms
   `);
 });
